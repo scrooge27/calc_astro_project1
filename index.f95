@@ -126,7 +126,7 @@ module utils
         
         seek=y(id)+passo
         
-        call max_fun(y,n,yvals(1)) !in questo modo alla prima iterazione il secondo termine dell'and risulta sempre vero
+        call max_fun(y,n,yvals(1)) !in questo modo alla prima iterazione la condizione risulta sempre vera
         yvals(2)=yvals(1)
 
         !cerco a sx
@@ -169,7 +169,7 @@ module utils
 
 end module utils
 
-module interpol
+module calc
     implicit none
     contains
     !nelle seguenti subroutine a è la matrice dei coefficienti, c il vettore dei termini noti
@@ -265,73 +265,10 @@ module interpol
         end do
     end subroutine spline
 
-    real*8 function fun_spline(x,f,fd2,xval,n,i)
-        integer::n,i
-        real*8::xval,x(n),f(n),fd2(n)
-        fun_spline= fd2(i-1)/(6.d0*(x(i)-x(i-1)))*(x(i)-xval)**3+&
-                    fd2(i)/(6.d0*(x(i)-x(i-1)))*(xval-x(i-1))**3+&
-                    (f(i-1)/((x(i)-x(i-1)))-fd2(i-1)*(x(i)-x(i-1))/6.d0)*(x(i)-xval)+&
-                    (f(i)/((x(i)-x(i-1)))-fd2(i)*(x(i)-x(i-1))/6.d0)*(xval-x(i-1))
-    end function fun_spline
-
-end module interpol
-
-module integration
-    implicit none
-    contains
-    subroutine gen(a)
-        real*8::a,b,risultato,sum,x_int
-        integer::n_punti,n_int
-        real*8,external::f,f1
-
-        sum=0.d0
-
-        print*,"dammi il numero di punti"
-        read(*,*) n_punti
-        print*,"dammi il numero di intervallini"        !spezzo su più intervalli come Newton-Cotes
-        read(*,*) n_int
-        print*,"dammi il valore dove spezzare l'integrale"
-        read(*,*) x_int
-
-        !faccio l'integrale con l'infinito negativo
-        a=-1.d0/abs(x_int)
-        b=0.d0
-
-        call quadratura(f1,a,b,n_punti,n_int,risultato)
-
-        print*,risultato
-
-        sum=sum+risultato
-
-        !faccio l'integrale centrale
-        a=-abs(x_int)
-        b=abs(x_int)
-
-        call quadratura(f,a,b,n_punti,n_int,risultato)
-
-        print*,risultato
-
-        sum=sum+risultato
-
-        !faccio l'integrale con l'infinito positivo
-        a=0.
-        b=1./abs(x_int)
-        
-
-        call quadratura(f1,a,b,n_punti,n_int,risultato)
-        
-        print*,risultato
-
-        sum=sum+risultato
-
-        print*,sum
-
-    end subroutine gen
-
-    subroutine quadratura(f,a,b,n,n_int,res)
+    subroutine quadratura(f,ol,om,a,b,n,n_int,res)
         real*8,external::f
         real*8,allocatable::c(:),xd(:),x(:)
-        real*8::a,b,res,sum,delta,x1,x2
+        real*8::a,b,res,sum,delta,x1,x2,ol,om
         integer::n,n_int,i,j
     
         allocate(c(0:n-1), xd(0:n-1), x(0:n-1))     !li rendo zero-based soltanto per coerenza rispetto alle slide
@@ -386,7 +323,7 @@ module integration
             sum=0.d0
     
             do i=0,n-1
-                sum=sum+c(i)*f(x(i))
+                sum=sum+c(i)*f(x(i),ol,om)
             end do
     
             sum=sum*(x2-x1)/2.d0  !moltiplico per dx
@@ -397,11 +334,20 @@ module integration
        
     end subroutine quadratura
 
-end module integration
+    real*8 function fun_spline(x,f,fd2,xval,n,i)
+        integer::n,i
+        real*8::xval,x(n),f(n),fd2(n)
+        fun_spline= fd2(i-1)/(6.d0*(x(i)-x(i-1)))*(x(i)-xval)**3+&
+                    fd2(i)/(6.d0*(x(i)-x(i-1)))*(xval-x(i-1))**3+&
+                    (f(i-1)/((x(i)-x(i-1)))-fd2(i-1)*(x(i)-x(i-1))/6.d0)*(x(i)-xval)+&
+                    (f(i)/((x(i)-x(i-1)))-fd2(i)*(x(i)-x(i-1))/6.d0)*(xval-x(i-1))
+    end function fun_spline
+
+end module calc
 
 module steps
     use utils
-    use interpol
+    use calc
     implicit none
     contains
 
@@ -427,242 +373,287 @@ module steps
 
     end subroutine step1
 
-    subroutine step2(p_vec,p_err,app_mag_vec,app_mag_err,n_gal,gal)
-        integer::i,j,k,l,ll,ii,n_gal,n_ceph,n_p,p_id,counter,counter2,counter3,dim,dim2
+    subroutine step2(ceph,coeff,p,app_mag,abs_mag,dist_mod,dist)
+        integer::i,j,k,ii,n_ceph,n_p,p_id,counter,counter2,counter3,dim,dim2
 
-        real*8,intent(out)::p_vec(n_gal,3),p_err(n_gal,3),app_mag_vec(n_gal,3),app_mag_err(n_gal,3)
-        real*8,allocatable::mat_ceph(:,:),trid(:,:),diff(:),p(:),c(:),fd2(:),chisq(:),mag_arr(:),mag_err(:),spline_vec(:)
+        real*8,intent(in)::coeff(2)
+        real*8,intent(out)::p(2),app_mag(2),abs_mag(2),dist_mod(2),dist(2)
+        real*8,allocatable::mat_ceph(:,:),trid(:,:),diff(:),p_vec(:),c(:),fd2(:),chisq(:),mag_arr(:),mag_err(:),spline_vec(:)
         real*8::max_jd,min_jd,a,b,min_diff,xval(2),splval(2),min_chisq,cl_p(2),magval,passo,jd
 
+        character(len=17),intent(in)::ceph
+        character(len=23)::chisq_file
         character(len=28)::spl_out
-        character(len=17)::ceph
-        character(len=7)::gal(n_gal)
 
-        ceph(1:5)="ceph_"
-        ceph(14:17)=".txt"
-        
+        !inizializzo i file di output per i grafici
+
+        chisq_file(1:6)="chisq_"
+        chisq_file(7:23)=ceph
+
         spl_out(1:11)="spline_out_"
+        spl_out(12:28)=ceph
 
-        do i=1,n_gal
-            ceph(6:12)=gal(i)
-            ceph(13:13)="_"
-            print*,"setting ",ceph
-            read(*,*)
-            do j=1,3
-                select case(j)
-                case(1)
-                    ceph(13:13)="A"
-                    print*,"ceph A"
-                case(2)
-                    ceph(13:13)="B"
-                    print*,"ceph B"
-                case(3)
-                    ceph(13:13)="C"
-                    print*,"ceph C"
-                end select
+        call lettura(ceph,mat_ceph,n_ceph,3,"none")
+        call sort(mat_ceph,n_ceph,3)
 
-                call lettura(ceph,mat_ceph,n_ceph,3,"none")
-                call sort(mat_ceph,n_ceph,3)
+        min_jd=mat_ceph(1,1)
+        max_jd=mat_ceph(n_ceph,1)
 
-                min_jd=mat_ceph(1,1)
-                max_jd=mat_ceph(n_ceph,1)
-
-                !carico diff con le differenze temporali
-                allocate(diff(n_ceph-1))
-                do k=2,n_ceph
-                    diff(k-1)=mat_ceph(k,1)-mat_ceph(k-1,1)
-                end do
-
-                b=(max_jd-min_jd)*0.5d0
-
-                !print*,"gli estremi temporali sono"
-                !print*,min_jd,max_jd,b
-                !read(*,*)
-                
-                call min_fun(diff,n_ceph-1,min_diff)
-                a=3.d0*min_diff
-
-                !carico p con il range di periodi
-                n_p=int((b-a)/0.02d0)+1
-                allocate (p(n_p))
-                do k=1,n_p 
-                    p(k)=a+(k-1)*0.02d0
-                end do
-
-                !print*,"il range di periodi da testare e il seguente"
-                !print*,p(1),p(n_p),n_p
-                !read(*,*)
-
-                !traccio la spline
-                allocate(trid(n_ceph,n_ceph),c(n_ceph),fd2(n_ceph),chisq(n_p))
-                call spline(trid,c,mat_ceph(:,1),mat_ceph(:,2),n_ceph) !metto in relazione periodi(1) e magnitudini(2)
-                call jordan(trid,c,n_ceph,fd2)
-
-                open(10,file="chisq.txt")
-                !interpolo con la spline ogni punto traslandolo di +- P
-                do k=1,n_p
-                    chisq(k)=0.d0
-                    counter=0
-                    do l=1,n_ceph
-                        xval(1)=mat_ceph(l,1)+p(k)
-                        xval(2)=mat_ceph(l,1)-p(k)
-
-                        do ll=1,2
-
-                            do while ((xval(ll)<=max_jd).and.(xval(ll)>=min_jd))
-                                
-                                do ii=2,n_ceph
-                                    if((xval(ll)<=mat_ceph(ii,1)).and.(xval(ll)>=mat_ceph(ii-1,1))) then 
-                                        exit
-                                    end if
-                                end do
-                                splval(ll)=fun_spline(mat_ceph(:,1),mat_ceph(:,2),fd2,xval(ll),n_ceph,ii)
-                            
-                                !calcolo del chi quadro
-                            
-                                chisq(k)=chisq(k)+((splval(ll)-mat_ceph(l,2))/mat_ceph(l,3))**2
-
-                                select case (ll)
-                                case(1)
-                                    xval(ll)=xval(ll)+p(k)
-                                case(2)
-                                    xval(ll)=xval(ll)-p(k)
-                                end select
-
-                                counter=counter+1
-
-                            end do
-                        end do
-                    end do
-                    chisq(k)=chisq(k)/(counter-1)         !ho tolto il vincolo del valore stimato con la spline 
-                    write(10,*)p(k),chisq(k)      
-                end do
-                close(10)
-
-                call min_fun(chisq,n_p,min_chisq,p_id)
-                !print*,"il chi quadro minimo e",min_chisq
-                !print*,"il periodo minimo e",p(p_id),"con id",p_id
-                !read(*,*)
-                call closest(p,chisq,n_p,p_id,cl_p)
-                !print*,"il periodo a sinistra è",cl_p(1)
-                !print*,"il periodo a destra è",cl_p(2)
-                !read(*,*)
-                cl_p(1)=p(p_id)-cl_p(1)
-                cl_p(2)=cl_p(2)-p(p_id)
-
-                p_vec(i,j)=p(p_id)
-                
-                p_err(i,j)=min(cl_p(1),cl_p(2))
-
-
-                !calcolo delle magnitudini 
-                counter=0
-                passo=p(p_id)*0.01d0
-                dim=int(b*2.d0/passo)+1
-                
-                allocate(spline_vec(dim))
-
-                dim2=int((dim-1)/100)+1
-
-                allocate(mag_arr(dim2))
-                allocate(mag_err(dim2))
-
-                mag_err=0.d0
-
-                jd=min_jd
-                magval=0.d0
-                counter2=2
-                counter3=0
-                l=1
-                k=1
-                spl_out(12:28)=ceph
-                open(10,file=spl_out)
-                
-                do while(jd<=max_jd)
-
-                    do ii=counter2,n_ceph
-                        if((jd<=mat_ceph(ii,1)).and.(jd>=mat_ceph(ii-1,1))) then 
-                            exit
-                        end if
-                    end do
-
-                    if(ii>counter2)then
-                        counter2=ii
-                    end if
-                    
-                    spline_vec(k)=fun_spline(mat_ceph(:,1),mat_ceph(:,2),fd2,jd,n_ceph,ii)
-                    write(10,*)jd,spline_vec(k)
-                    magval=magval+spline_vec(k)
-
-                    if ((jd-min_jd)>=l*p(p_id) .or. (jd+passo)>max_jd) then
-                        mag_arr(l)=magval/counter  !carico la media delle magnitudini nel range coperto
-                        !calcolo errore
-                        do ll=k,counter3,-1
-                            mag_err(l)=mag_err(l)+(spline_vec(ll)-mag_arr(l))**2
-                        end do
-                        mag_err(l)=sqrt(mag_err(l)/(counter-1))
-                        magval=0.d0
-                        counter=0
-                        counter3=k+1
-                        l=l+1
-                    end if
-                    k=k+1
-                    counter=counter+1
-                    jd=jd+passo
-                end do
-                
-                close(10)
-
-                call w_mean(mag_arr,mag_err,dim2,app_mag_vec(i,j),app_mag_err(i,j))
-                
-
-                !print*,p_vec(i,j),app_mag_vec(i,j),app_mag_err(i,j)
-                !read(*,*)
-                !last operation
-                deallocate(p,diff,fd2,c,trid,chisq,mat_ceph,mag_arr,mag_err,spline_vec)
-                
-            end do
+        !carico diff con le differenze temporali
+        allocate(diff(n_ceph-1))
+        do i=2,n_ceph
+            diff(i-1)=mat_ceph(i,1)-mat_ceph(i-1,1)
         end do
-    end subroutine step2
 
-    subroutine step3(p,p_err,app_mag,app_mag_err,n_gal,abs_mag,abs_mag_err,coeff,dist,dist_err)
-        real*8,intent(out)::abs_mag(n_gal,3),abs_mag_err(n_gal,3),dist(n_gal),dist_err(n_gal)
-        real*8:: coeff(2), &
-                p(n_gal,3),p_err(n_gal,3), &
-                app_mag(n_gal,3),app_mag_err(n_gal,3), &
-                dist_mod(3),dist_mod_err(3), &
-                d(3),d_err(3)
+        b=(max_jd-min_jd)*0.5d0
 
-        integer::i,j,n_gal
-
-        open(10,file="abs_mag.txt")
-
-        do i=1,n_gal
-            do j=1,3
-                abs_mag(i,j)=coeff(2)*log10(p(i,j))+coeff(1)
-                abs_mag_err(i,j)=abs(coeff(2)/(p(i,j)*log(10.d0)))*p_err(i,j)
-                write(10,*) p(i,j),p_err(i,j),abs_mag(i,j),abs_mag_err(i,j)
-
-                dist_mod(j)=app_mag(i,j)-abs_mag(i,j)
-                dist_mod_err(j)=sqrt(app_mag_err(i,j)**2+abs_mag_err(i,j)**2)
-
+        !print*,"gli estremi temporali sono"
+        !print*,min_jd,max_jd,b
+        !read(*,*)
                 
-                d(j)=10**(0.2d0*dist_mod(j)-5)
-                d_err(j)=d(j)*log(10.d0)*0.2d0*dist_mod_err(j)
+        call min_fun(diff,n_ceph-1,min_diff)
+        a=3.d0*min_diff
 
+        !carico p_vec con il range di periodi
+        n_p=int((b-a)/0.02d0)+1
+        allocate (p_vec(n_p))
+        do i=1,n_p 
+            p_vec(i)=a+(i-1)*0.02d0
+        end do
+
+        !print*,"il range di periodi da testare e il seguente"
+        !print*,p_vec(1),p_vec(n_p),n_p
+        !read(*,*)
+
+        !traccio la spline
+        allocate(trid(n_ceph,n_ceph),c(n_ceph),fd2(n_ceph),chisq(n_p))
+        call spline(trid,c,mat_ceph(:,1),mat_ceph(:,2),n_ceph) !metto in relazione periodi(1) e magnitudini(2)
+        call jordan(trid,c,n_ceph,fd2)
+
+        open(10,file=chisq_file)
+            !interpolo con la spline ogni punto traslandolo di +- P
+        do i=1,n_p
+            chisq(i)=0.d0
+            counter=0
+            do j=1,n_ceph
+                xval(1)=mat_ceph(j,1)+p_vec(i)
+                xval(2)=mat_ceph(j,1)-p_vec(i)
+
+                do k=1,2
+
+                    do while ((xval(k)<=max_jd).and.(xval(k)>=min_jd))
+                        
+                        do ii=2,n_ceph
+                            if((xval(k)<=mat_ceph(ii,1)).and.(xval(k)>=mat_ceph(ii-1,1))) then 
+                                exit
+                            end if
+                        end do
+                        splval(k)=fun_spline(mat_ceph(:,1),mat_ceph(:,2),fd2,xval(k),n_ceph,ii)
+                    
+                        !calcolo del chi quadro
+                    
+                        chisq(i)=chisq(i)+((splval(k)-mat_ceph(j,2))/mat_ceph(j,3))**2
+
+                        select case (k)
+                        case(1)
+                            xval(k)=xval(k)+p_vec(i)
+                        case(2)
+                            xval(k)=xval(k)-p_vec(i)
+                        end select
+
+                        counter=counter+1
+
+                    end do
+                end do
             end do
-            call w_mean(d,d_err,3,dist(i),dist_err(i))
+            chisq(i)=chisq(i)/(counter-1)         !ho tolto il vincolo del valore stimato con la spline 
+            write(10,*)p_vec(i),chisq(i)      
         end do
 
         close(10)
 
-    end subroutine step3
+        call min_fun(chisq,n_p,min_chisq,p_id)
+        !print*,"il chi quadro minimo e",min_chisq
+        !print*,"il periodo minimo e",p_vec(p_id),"con id",p_id
+        !read(*,*)
+        call closest(p_vec,chisq,n_p,p_id,cl_p)
+        !print*,"il periodo a sinistra è",cl_p(1)
+        !print*,"il periodo a destra è",cl_p(2)
+        !read(*,*)
+        cl_p(1)=p_vec(p_id)-cl_p(1)
+        cl_p(2)=cl_p(2)-p_vec(p_id)
+
+        p(1)=p_vec(p_id)                !periodo
+        p(2)=max(cl_p(1),cl_p(2))       !errore sul periodo
+
+
+        !calcolo della magnitudine apparente
+        counter=0
+        passo=p(1)*0.01d0
+        dim=int(b*2.d0/passo)+1
+        
+        allocate(spline_vec(dim))
+
+        dim2=int((dim-1)/100)+1
+
+        allocate(mag_arr(dim2))
+        allocate(mag_err(dim2))
+
+        mag_err=0.d0
+
+        jd=min_jd
+        magval=0.d0
+        counter2=2
+        counter3=0
+        i=1
+        j=1
+        
+        open(10,file=spl_out)
+                
+        do while(jd<=max_jd)
+
+            do ii=counter2,n_ceph
+                if((jd<=mat_ceph(ii,1)).and.(jd>=mat_ceph(ii-1,1))) then 
+                    exit
+                end if
+            end do
+
+            if(ii>counter2)then
+                counter2=ii
+            end if
+            
+            spline_vec(j)=fun_spline(mat_ceph(:,1),mat_ceph(:,2),fd2,jd,n_ceph,ii)
+            write(10,*)jd,spline_vec(j)
+            magval=magval+spline_vec(j)
+
+            if ((jd-min_jd)>=i*p(1) .or. (jd+passo)>max_jd) then
+                mag_arr(i)=magval/counter  !carico la media delle magnitudini nel range coperto
+                !calcolo errore
+                do k=j,counter3,-1
+                    mag_err(i)=mag_err(i)+(spline_vec(k)-mag_arr(i))**2
+                end do
+                mag_err(i)=sqrt(mag_err(i)/(counter-1))
+                magval=0.d0
+                counter=0
+                counter3=j+1
+                i=i+1
+            end if
+            j=j+1
+            counter=counter+1
+            jd=jd+passo
+        end do
+        
+        close(10)
+
+        call w_mean(mag_arr,mag_err,dim2,app_mag(1),app_mag(2))
+        
+        !print*,p,app_mag
+        !read(*,*)
+
+
+        abs_mag(1)=coeff(2)*log10(p(1))+coeff(1)            !mag assoluta
+        abs_mag(2)=abs(coeff(2)/(p(1)*log(10.d0)))*p(2)     !errore sulla magnitudine
+        
+
+        dist_mod(1)=app_mag(1)-abs_mag(1)                   !modulo di distanza
+        dist_mod(2)=sqrt(app_mag(2)**2+abs_mag(2)**2)       !errore sul modulo di distanza
+
+
+        dist(1)=10**(0.2d0*dist_mod(1)-5)                   !distanza
+        dist(2)=dist(1)*log(10.d0)*0.2d0*dist_mod(2)        !errore sulla distanza
+
+        close(10)
+        !last operation
+        deallocate(p_vec,diff,fd2,c,trid,chisq,mat_ceph,mag_arr,mag_err,spline_vec)
+    end subroutine step2
 
     subroutine step5(h0)
-        !da implementare
-        real*8,parameter::t0=13.88d9,t0_err=0.01*t0
-        real*8::h0
+        real*8,parameter::t0=13.82d9,x_int=1.d0
+        real*8,external::f,f1
+        real*8::h0(2),err_invh0,toll, &
+                ol,om,res,risultato
+
+        integer::i,ii,jj
+        integer,parameter::n_punti=4,n_int=100
+
+        character(len=16)::doc,flat,clsd,opn
+
+        doc="planck_total.txt"
+
+        flat(1:11)="planck_flat"
+        flat(13:16)=".txt"
+
+        clsd(1:11)="planck_clsd"
+        clsd(13:16)=".txt"
+
+        opn(1:11)="planck_open"
+        opn(13:16)=".txt"
+
+        h0(1)=h0(1)*31536.d0/3.086d16
+
+        do i=1,3
+            toll=0.01d0*t0*i
+            if(i==1)then                    !mi evito di sovrascrivere tre volte lo stesso file
+                open(12,file=doc)
+                open(10,file="planck_flatonly.txt")
+            else
+                close(10)
+                close(12)
+            end if
+
+            write(flat(12:12),'(i0.0)') i
+            write(clsd(12:12),'(i0.0)') i
+            write(opn(12:12),'(i0.0)') i
+
+            open(1,file=flat)
+            open(2,file=clsd)
+            open(3,file=opn)
+
+            ol=0.d0
+            do ii=0,100
+                om=0.d0
+                do jj=0,100
+                    res=0.d0
+                    
+                    call quadratura(f,ol,om,0.d0,1.d0,n_punti,n_int,risultato)
+                    res=res+risultato
+                
+                    call quadratura(f1,ol,om,0.d0,1.d0/x_int,n_punti,n_int,risultato)
+                    res=res+risultato
+
+                    if (i==1)then
+                        if (ii+jj==100) then
+                            write(10,*) om,ol,res
+                        end if
+                        write(12,*) om,ol,res
+                    end if
+
+                    if(abs(res/h0(1)-t0)<toll)then
+                        if (ii+jj==100) then
+                            write(1,*) om,ol,res
+                        else if (ii+jj>100) then
+                            write(2,*) om,ol,res
+                        else if (ii+jj<100) then
+                            write(3,*) om,ol,res
+                        end if
+                    end if
+                    om=om+0.01d0
+                end do
+                ol=ol+0.01d0
+            end do
+
+            close(10)
+            close(3)
+            close(2)
+            close(1)
+        end do
+        !err_invh0=h0(2)/(h0(1))**2
+        !h0=68.5d0
         
+
+        !print*,toll*h0(1)
+        !print*,t0*h0(1)
+
     end subroutine step5
     
 end module steps
@@ -671,69 +662,90 @@ program main
     use steps
     implicit none
     integer::n_gal,i,j
-    real*8::coeff(2),h0,h0_err
-    real*8,allocatable::mat_gal(:,:), &
-                        p(:,:),p_err(:,:), &
-                        app_mag(:,:),app_mag_err(:,:), &
-                        abs_mag(:,:),abs_mag_err(:,:), &
-                        dist(:),dist_err(:), &
-                        h(:),h_err(:) 
+    real*8::coeff(2),h0(2), &                                        !variabili generali
+            p(2),app_mag(2),abs_mag(2),dist_mod(3,2),dist(3,2)      !variabili delle cefeidi
+    real*8,allocatable::gal_vel(:,:), &                             !variabili delle galassie
+                        gal_dist(:,:), &
+                        gal_h(:,:) 
     character(len=11)::doc1="gal_vel.txt"
     character(len=7),allocatable::gal(:)
+    character(len=17)::ceph
+    character(len=25):: fmt1_string,fmt2_string
 
-
-    call lettura(doc1,mat_gal,n_gal,2,"first",gal)
-    !call sort(mat_gal,n_gal,2,gal)
-    allocate(p(n_gal,3),p_err(n_gal,3), &
-            app_mag(n_gal,3),app_mag_err(n_gal,3), &
-            abs_mag(n_gal,3),abs_mag_err(n_gal,3), &
-            dist(n_gal),dist_err(n_gal), &
-            h(n_gal),h_err(n_gal))
-
-
+    call lettura(doc1,gal_vel,n_gal,2,"first",gal)
+    allocate(gal_dist(n_gal,2),gal_h(n_gal,2))
     call step1(coeff)
 
     print*,coeff
     !nota: c1 è c(2) e c2 è c(1)
-    call step2(p,p_err,app_mag,app_mag_err,n_gal,gal)    
-    call step3(p,p_err,app_mag,app_mag_err,n_gal,abs_mag,abs_mag_err,coeff,dist,dist_err)
     
-    open(10,file="dist_vel.txt")
-    do i=1,n_gal
-        print*,"galaxy:",gal(i)
-        do j=1,3
-            print*,"cepheid number",j,":"
-            print*,"period:",p(i,j),"error:",p_err(i,j)
-            print*,"apparent magnitude:",app_mag(i,j),"error:",app_mag_err(i,j)     !c'è ancora un problema in questa stima!!!
-            print*,"absolute magnitude:",abs_mag(i,j),"error:",abs_mag_err(i,j)
-        end do
-        print*,"distance:",dist(i),"error:",dist_err(i)
-        h(i)=mat_gal(i,1)/dist(i)
-        h_err(i)=sqrt((mat_gal(i,2)/dist(i))**2+(mat_gal(i,1)*dist_err(i)/(dist(i))**2)**2)
-        print*,"H0:",h(i),"error:",h_err(i)
-        write(10,*)dist(i),dist_err(i),mat_gal(i,1),mat_gal(i,2)
-        read(*,*)
-    end do
-    close(10)
-  
-    
-    call w_mean(h,h_err,n_gal,h0,h0_err)
-    print*,"mean Hubble constant:",h0,"error:",h0_err
+    ceph(1:5)="ceph_"
+    ceph(14:17)=".txt"
 
+    write(fmt1_string,'(a,i3,a)') '(' ,10+1, '(1pe19.2))' 
+    write(fmt2_string,'(a,i3,a)') '(' ,6+1, '(1pe19.2))' 
+
+    open(20,file="tab_ceph.txt")
+    open(15,file="tab_gal.txt")
+
+    do i=1,n_gal
+        ceph(6:12)=gal(i)
+        ceph(13:13)="_"
+        print*,"setting ",ceph
+        !read(*,*)
+        do j=1,3
+            select case(j)
+            case(1)
+                ceph(13:13)="A"
+            case(2)
+                ceph(13:13)="B"
+            case(3)
+                ceph(13:13)="C"
+            end select
+        !    print*,"ceph ",ceph(13:13)
+        !    read(*,*)
+        !    call step2(ceph,coeff,p,app_mag,abs_mag,dist_mod(j,:),dist(j,:))  
+        !    write(20,fmt1_string) p,app_mag,abs_mag,dist_mod(j,:),dist(j,:)
+        !    print*,"period:",p(1),"error:",p(2)
+        !    print*,"apparent magnitude:",app_mag(1),"error:",app_mag(2)     !c'è ancora un problema in questa stima!!!
+        !    print*,"absolute magnitude:",abs_mag(1),"error:",abs_mag(2)
+        !    print*,"distance module:",dist_mod(j,1),"error:",dist_mod(j,2)
+        !    print*,"distance:",dist(j,1),"error:",dist(j,2)
+        !    read(*,*)
+        end do
+        !print*,""
+        !call w_mean(dist(:,1),dist(:,2),3,gal_dist(i,1),gal_dist(i,2))      !calcolo la distanza della galassia ed il suo errore
+        !gal_h(i,1)=gal_vel(i,1)/gal_dist(i,1)                               !calcolo la costante di Hubble per la galassia                                
+        !gal_h(i,2)=sqrt((gal_vel(i,2)/gal_dist(i,1))**2+ &                  !calcolo l'errore sulla costante di Hubble
+        !           (gal_vel(i,1)*gal_dist(i,2)/(gal_dist(i,1))**2)**2)
+        !write(15,fmt2_string) gal_dist(i,:),gal_vel(i,:),gal_h(i,:)
+        !print*,"galaxy distance:",gal_dist(i,1),"error:",gal_dist(i,2)
+        !print*,"galaxy velocity:",gal_vel(i,1),"error:",gal_vel(i,2)
+        !print*,"galaxy H0:",gal_h(i,1),"error:",gal_h(i,2)
+        !read(*,*)
+    end do  
+
+    close(15)
+    close(20)
+
+    !call w_mean(gal_h(:,1),gal_h(:,2),n_gal,h0(1),h0(2))
+    !print*,"mean Hubble constant:",h0(1),"error:",h0(2)
+
+    h0(1)=77.260722515479429
     call step5(h0)
 end program main
 
-    real*8 function f(z)
-    implicit none
-        real*8::z,e
-        real*8,parameter:: om=0.5d0,ol=0.5d0
+    real*8 function f(z,ol,om)
+        implicit none
+        real*8::z,e,ol,om
+
         e=om*(1+z)**3+(1-om-ol)*(1+z)**2+ol
         f=1/((1+z)*sqrt(e))
     end function f
 
-    real*8 function f1(t)
-    implicit none
-        real*8::t
+    real*8 function f1(t,ol,om)
+        implicit none
+        real*8::t,ol,om
         real*8,external::f
-        f1=f(1.d0/t)/t**2
+        f1=f(1.d0/t,ol,om)/t**2
     end function f1

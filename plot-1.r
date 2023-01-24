@@ -19,16 +19,17 @@ points(p,abs_mag,pch=16,cex=1.3,col="red")
 
 
 #leggo il file generato e plotto i punti-STEP 3
-mags=read.table("C:\\Users\\simop\\Desktop\\UNI\\II anno\\calc-astro\\project_1\\abs_mag.txt")
+mags=read.table("C:\\Users\\simop\\Desktop\\UNI\\II anno\\calc-astro\\project_1\\tab_ceph.txt")
 
 calc_p=mags[,1]
 calc_p_err=mags[,2]
-calc_m=mags[,3]
-calc_m_err=mags[,4]
+calc_m=mags[,5]
+calc_m_err=mags[,6]
 
 calc_p=log10(calc_p)
 
-points(calc_p,calc_m,pch=16)
-arrows(x0=calc_p-calc_p_err,y0=calc_m-calc_m_err,x1=calc_p+calc_p_err,y1=calc_m+calc_m_err,code=3,angle=90,length=0.1,lwd=1.5)
+points(calc_p,calc_m,pch=16,cex=1.1)
+#arrows(x0=calc_p,y0=calc_m-calc_m_err,x1=calc_p,y1=calc_m+calc_m_err,code=3,angle=90,length=0.05,lwd=1.5)
+arrows(x0=calc_p-calc_p_err,y0=calc_m,x1=calc_p+calc_p_err,y1=calc_m,code=3,angle=90,length=0.05,lwd=1.5)
 
 legend("bottomright",inset=.05,legend=c("linear fit","cefeidi fornite","cefeidi calcolate"),col=c("blue","red","black"), lty=1,pch=c(20,16,16),lwd=1,cex=0.8)
