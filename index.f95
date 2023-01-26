@@ -61,7 +61,7 @@ module utils
                 end if
             end do
     
-            v1(indice,1)=v1(i,1)      !metto il dato corrente in corrisondenza dell'indice in cui si trovava il minimo
+            v1(indice,1)=v1(i,1)     !metto il dato corrente in corrisondenza dell'indice in cui si trovava il minimo
             v1(i,1)=min              !metto nella posizione corrente il valore minimo
     
             do j=2,cols
@@ -72,7 +72,7 @@ module utils
     
             if(present(v2)) then
                 copy2= v2(indice)   !prima non avevo bisogno della copia avendo il dato salvato in min
-                v2(indice)=v2(i)  !metto ogni dato in posizione corrente in corrispondenza dell'indice in cui si trovava il minimo
+                v2(indice)=v2(i)    !metto ogni dato in posizione corrente in corrispondenza dell'indice in cui si trovava il minimo
                 v2(i)=copy2     
             end if
     
@@ -148,11 +148,9 @@ module utils
         xvals(1)=x(min_id(1))
 
         xvals(2)=x(min_id(2))
-    
-        !print*,min_id(1),min_id(2)
     end subroutine closest
 
-    subroutine w_mean(v,ve,n,m,me)
+    subroutine w_mean(v,ve,n,m,me)    !fa la media pesata
         integer::n,i
         real*8::v(n),ve(n),w(n),sv,sw
         real*8,intent(out)::m,me
@@ -172,7 +170,7 @@ end module utils
 module calc
     implicit none
     contains
-    !nelle seguenti subroutine a è la matrice dei coefficienti, c il vettore dei termini noti
+    !in jordan e spline "a" è la matrice dei coefficienti, "c" il vettore dei termini noti
 
     subroutine jordan(a,c,n,x)
         real*8::a(n,n),c(n),fakt,aux  
@@ -271,7 +269,7 @@ module calc
         real*8::a,b,res,sum,delta,x1,x2,ol,om
         integer::n,n_int,i,j
     
-        allocate(c(0:n-1), xd(0:n-1), x(0:n-1))     !li rendo zero-based soltanto per coerenza rispetto alle slide
+        allocate(c(0:n-1), xd(0:n-1), x(0:n-1))     !li rendo zero-based per coerenza rispetto alle slide
     
         select case(n)
         case(1)
@@ -393,6 +391,7 @@ module steps
         spl_out(1:11)="spline_out_"
         spl_out(12:28)=ceph
 
+        !(1)-calcolo del periodo
         call lettura(ceph,mat_ceph,n_ceph,3,"none")
         call sort(mat_ceph,n_ceph,3)
 
@@ -406,10 +405,6 @@ module steps
         end do
 
         b=(max_jd-min_jd)*0.5d0
-
-        !print*,"gli estremi temporali sono"
-        !print*,min_jd,max_jd,b
-        !read(*,*)
                 
         call min_fun(diff,n_ceph-1,min_diff)
         a=3.d0*min_diff
@@ -420,10 +415,6 @@ module steps
         do i=1,n_p 
             p_vec(i)=a+(i-1)*0.02d0
         end do
-
-        !print*,"il range di periodi da testare e il seguente"
-        !print*,p_vec(1),p_vec(n_p),n_p
-        !read(*,*)
 
         !traccio la spline
         allocate(trid(n_ceph,n_ceph),c(n_ceph),fd2(n_ceph),chisq(n_p))
@@ -473,21 +464,16 @@ module steps
         close(10)
 
         call min_fun(chisq,n_p,min_chisq,p_id)
-        !print*,"il chi quadro minimo e",min_chisq
-        !print*,"il periodo minimo e",p_vec(p_id),"con id",p_id
-        !read(*,*)
+
         call closest(p_vec,chisq,n_p,p_id,cl_p)
-        !print*,"il periodo a sinistra è",cl_p(1)
-        !print*,"il periodo a destra è",cl_p(2)
-        !read(*,*)
+    
         cl_p(1)=p_vec(p_id)-cl_p(1)
         cl_p(2)=cl_p(2)-p_vec(p_id)
 
         p(1)=p_vec(p_id)                !periodo
         p(2)=max(cl_p(1),cl_p(2))       !errore sul periodo
 
-
-        !calcolo della magnitudine apparente
+        !(2)-calcolo della magnitudine apparente
         counter=0
         passo=p(1)*0.01d0
         dim=int(b*2.d0/passo)+1
@@ -547,10 +533,6 @@ module steps
 
         call w_mean(mag_arr,mag_err,dim2,app_mag(1),app_mag(2))
         
-        !print*,p,app_mag
-        !read(*,*)
-
-
         abs_mag(1)=coeff(2)*log10(p(1))+coeff(1)            !mag assoluta
         abs_mag(2)=abs(coeff(2)/(p(1)*log(10.d0)))*p(2)     !errore sulla magnitudine
         
@@ -567,13 +549,14 @@ module steps
         deallocate(p_vec,diff,fd2,c,trid,chisq,mat_ceph,mag_arr,mag_err,spline_vec)
     end subroutine step2
 
-    subroutine step5(h0)
+    subroutine step3(h0)
         real*8,parameter::t0=13.82d9,x_int=1.d0
         real*8,external::f,f1
-        real*8::h0(2),err_invh0,toll, &
+        real*8::h0(2),toll, &
                 ol,om,res,risultato
 
-        integer::i,ii,jj
+        integer::i,ii,jj,&
+                c1,c2,c3
         integer,parameter::n_punti=4,n_int=100
 
         character(len=16)::doc,flat,clsd,opn
@@ -592,6 +575,13 @@ module steps
         h0(1)=h0(1)*31536.d0/3.086d16
 
         do i=1,3
+            print*,""
+            print*,i,"-sigma tolerance"
+            print*, ""
+            c1=0
+            c2=0
+            c3=0
+
             toll=0.01d0*t0*i
             if(i==1)then                    !mi evito di sovrascrivere tre volte lo stesso file
                 open(12,file=doc)
@@ -631,10 +621,13 @@ module steps
                     if(abs(res/h0(1)-t0)<toll)then
                         if (ii+jj==100) then
                             write(1,*) om,ol,res
+                            c1=c1+1
                         else if (ii+jj>100) then
                             write(2,*) om,ol,res
+                            c2=c2+1
                         else if (ii+jj<100) then
                             write(3,*) om,ol,res
+                            c3=c3+1
                         end if
                     end if
                     om=om+0.01d0
@@ -646,15 +639,13 @@ module steps
             close(3)
             close(2)
             close(1)
+
+            print*,"found ",c1," pair(s) of omega-matter and omega-lambda values consistent with flat universe"
+            print*,"found ",c2," pair(s) of omega-matter and omega-lambda values consistent with closed universe"
+            print*,"found ",c3," pair(s) of omega-matter and omega-lambda values consistent with open universe"
         end do
-        !err_invh0=h0(2)/(h0(1))**2
-        !h0=68.5d0
-        
 
-        !print*,toll*h0(1)
-        !print*,t0*h0(1)
-
-    end subroutine step5
+    end subroutine step3
     
 end module steps
 
@@ -662,7 +653,7 @@ program main
     use steps
     implicit none
     integer::n_gal,i,j
-    real*8::coeff(2),h0(2), &                                        !variabili generali
+    real*8::coeff(2),h0(2), &                                       !variabili generali
             p(2),app_mag(2),abs_mag(2),dist_mod(3,2),dist(3,2)      !variabili delle cefeidi
     real*8,allocatable::gal_vel(:,:), &                             !variabili delle galassie
                         gal_dist(:,:), &
@@ -674,11 +665,13 @@ program main
 
     call lettura(doc1,gal_vel,n_gal,2,"first",gal)
     allocate(gal_dist(n_gal,2),gal_h(n_gal,2))
-    call step1(coeff)
-
-    print*,coeff
-    !nota: c1 è c(2) e c2 è c(1)
     
+    call step1(coeff)
+    print*,"--STEP 1--"
+    print*,"estimated parameters for linear fit between mag_abs ~ log(P):"
+    print*,"c1:",coeff(2),"c2:",coeff(1)
+    print*,""
+
     ceph(1:5)="ceph_"
     ceph(14:17)=".txt"
 
@@ -688,11 +681,13 @@ program main
     open(20,file="tab_ceph.txt")
     open(15,file="tab_gal.txt")
 
+    print*,"--STEP 2--"
+    print*,""
     do i=1,n_gal
         ceph(6:12)=gal(i)
         ceph(13:13)="_"
-        print*,"setting ",ceph
-        !read(*,*)
+        print*,"--setting galaxy ",gal(i),"--","    (",i," out of ",n_gal,")"
+        print*,""
         do j=1,3
             select case(j)
             case(1)
@@ -702,37 +697,39 @@ program main
             case(3)
                 ceph(13:13)="C"
             end select
-        !    print*,"ceph ",ceph(13:13)
-        !    read(*,*)
-        !    call step2(ceph,coeff,p,app_mag,abs_mag,dist_mod(j,:),dist(j,:))  
-        !    write(20,fmt1_string) p,app_mag,abs_mag,dist_mod(j,:),dist(j,:)
-        !    print*,"period:",p(1),"error:",p(2)
-        !    print*,"apparent magnitude:",app_mag(1),"error:",app_mag(2)     !c'è ancora un problema in questa stima!!!
-        !    print*,"absolute magnitude:",abs_mag(1),"error:",abs_mag(2)
-        !    print*,"distance module:",dist_mod(j,1),"error:",dist_mod(j,2)
-        !    print*,"distance:",dist(j,1),"error:",dist(j,2)
-        !    read(*,*)
+            print*,"ceph ",ceph(13:13)
+            print*,""
+            call step2(ceph,coeff,p,app_mag,abs_mag,dist_mod(j,:),dist(j,:))  
+            write(20,fmt1_string) p,app_mag,abs_mag,dist_mod(j,:),dist(j,:)
+            print*,"period:",p(1),"error:",p(2)
+            print*,"apparent magnitude:",app_mag(1),"error:",app_mag(2)    
+            print*,"absolute magnitude:",abs_mag(1),"error:",abs_mag(2)
+            print*,"distance module:",dist_mod(j,1),"error:",dist_mod(j,2)
+            print*,"distance:",dist(j,1),"error:",dist(j,2)
+            print*,""
         end do
-        !print*,""
-        !call w_mean(dist(:,1),dist(:,2),3,gal_dist(i,1),gal_dist(i,2))      !calcolo la distanza della galassia ed il suo errore
-        !gal_h(i,1)=gal_vel(i,1)/gal_dist(i,1)                               !calcolo la costante di Hubble per la galassia                                
-        !gal_h(i,2)=sqrt((gal_vel(i,2)/gal_dist(i,1))**2+ &                  !calcolo l'errore sulla costante di Hubble
-        !           (gal_vel(i,1)*gal_dist(i,2)/(gal_dist(i,1))**2)**2)
-        !write(15,fmt2_string) gal_dist(i,:),gal_vel(i,:),gal_h(i,:)
-        !print*,"galaxy distance:",gal_dist(i,1),"error:",gal_dist(i,2)
-        !print*,"galaxy velocity:",gal_vel(i,1),"error:",gal_vel(i,2)
-        !print*,"galaxy H0:",gal_h(i,1),"error:",gal_h(i,2)
-        !read(*,*)
+
+        print*,""
+        call w_mean(dist(:,1),dist(:,2),3,gal_dist(i,1),gal_dist(i,2))      !calcolo la distanza della galassia ed il suo errore
+        gal_h(i,1)=gal_vel(i,1)/gal_dist(i,1)                               !calcolo la costante di Hubble per la galassia                                                                                                     
+        gal_h(i,2)=gal_h(i,1)*&                                            !calcolo l'errore sulla costante di Hubble
+                    sqrt((gal_vel(i,2)/gal_vel(i,1))**2+(gal_dist(i,2)/gal_dist(i,1))**2)
+        write(15,fmt2_string) gal_dist(i,:),gal_vel(i,:),gal_h(i,:)
+        print*,"galaxy distance:",gal_dist(i,1),"error:",gal_dist(i,2)
+        print*,"galaxy velocity:",gal_vel(i,1),"error:",gal_vel(i,2)
+        print*,"galaxy H0:",gal_h(i,1),"error:",gal_h(i,2)
+        print*,""
     end do  
 
     close(15)
     close(20)
 
-    !call w_mean(gal_h(:,1),gal_h(:,2),n_gal,h0(1),h0(2))
-    !print*,"mean Hubble constant:",h0(1),"error:",h0(2)
+    call w_mean(gal_h(:,1),gal_h(:,2),n_gal,h0(1),h0(2))
+    print*,"[--     ","mean Hubble constant:",h0(1),"error:",h0(2),"--]"
 
-    h0(1)=77.260722515479429
-    call step5(h0)
+    print*,""
+    print*,"--STEP 3--"
+    call step3(h0)
 end program main
 
     real*8 function f(z,ol,om)
