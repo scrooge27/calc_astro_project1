@@ -56,12 +56,14 @@ om=tab[,1]
 ol=tab[,2]
 t=tab[,3]
 
-rgl_init()
-rgl_add_axes(om, ol, t)
+#rgl_init()
+#rgl_add_axes(om, ol, t)
 
-rgl.spheres(om, ol, t, r = 0.0025) 
+#rgl.spheres(om, ol, t, r = 0.0025) 
             #color = get_colors() 
 
+open3d()
+#plot3d(om,ol,t,col="grey")
 lines3d(-om+1,om,1.25,col="red")
 
 #piatti
@@ -69,7 +71,7 @@ om=piatti[,1]
 ol=piatti[,2]
 t=piatti[,3]
 
-points3d(x=om, y=ol, z=t,col="red")
+plot3d(x=om, y=ol, z=t,col="red",xlab="om",ylab="ol",zlab="res")
 
 #chiusi
 om=chiusi[,1]

@@ -263,6 +263,15 @@ module calc
         end do
     end subroutine spline
 
+    real*8 function fun_spline(x,f,fd2,xval,n,i)
+        integer::n,i
+        real*8::xval,x(n),f(n),fd2(n)
+        fun_spline= fd2(i-1)/(6.d0*(x(i)-x(i-1)))*(x(i)-xval)**3+&
+                    fd2(i)/(6.d0*(x(i)-x(i-1)))*(xval-x(i-1))**3+&
+                    (f(i-1)/((x(i)-x(i-1)))-fd2(i-1)*(x(i)-x(i-1))/6.d0)*(x(i)-xval)+&
+                    (f(i)/((x(i)-x(i-1)))-fd2(i)*(x(i)-x(i-1))/6.d0)*(xval-x(i-1))
+    end function fun_spline
+
     subroutine quadratura(f,ol,om,a,b,n,n_int,res)
         real*8,external::f
         real*8,allocatable::c(:),xd(:),x(:)
@@ -331,15 +340,6 @@ module calc
         end do
        
     end subroutine quadratura
-
-    real*8 function fun_spline(x,f,fd2,xval,n,i)
-        integer::n,i
-        real*8::xval,x(n),f(n),fd2(n)
-        fun_spline= fd2(i-1)/(6.d0*(x(i)-x(i-1)))*(x(i)-xval)**3+&
-                    fd2(i)/(6.d0*(x(i)-x(i-1)))*(xval-x(i-1))**3+&
-                    (f(i-1)/((x(i)-x(i-1)))-fd2(i-1)*(x(i)-x(i-1))/6.d0)*(x(i)-xval)+&
-                    (f(i)/((x(i)-x(i-1)))-fd2(i)*(x(i)-x(i-1))/6.d0)*(xval-x(i-1))
-    end function fun_spline
 
 end module calc
 
