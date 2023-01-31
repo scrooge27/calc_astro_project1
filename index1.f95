@@ -18,7 +18,7 @@ module utils
             n=n+1
         end do
         100 continue
-
+        
         allocate(matrix(n,m))   
         
         if (present(vec)) then 
@@ -490,7 +490,7 @@ module steps
         jd=min_jd
         magval=0.d0
         counter2=2
-        counter3=0
+        counter3=1
         i=1
         j=1
         

@@ -31,7 +31,7 @@ calc_p=log10(calc_p)
 
 
 points(calc_p,calc_m,pch=19,cex=1.1)
-#arrows(x0=calc_p,y0=calc_m-calc_m_err,x1=calc_p,y1=calc_m+calc_m_err,code=3,angle=90,length=0.05,lwd=1.5)
-#arrows(x0=calc_p-calc_p_err,y0=calc_m,x1=calc_p+calc_p_err,y1=calc_m,code=3,angle=90,length=0.05,lwd=1.5)
+arrows(x0=calc_p,y0=calc_m-calc_m_err,x1=calc_p,y1=calc_m+calc_m_err,code=3,angle=90,length=0.05,lwd=1.5)
+arrows(x0=calc_p-calc_p_err,y0=calc_m,x1=calc_p+calc_p_err,y1=calc_m,code=3,angle=90,length=0.05,lwd=1.5)
 
 legend("bottomright",inset=.05,legend=c("linear fit","cefeidi fornite","cefeidi calcolate"),col=c("blue","red","black"), lty=c(1,NA,NA),pch=c(NA,16,16),lwd=c(2,NA,NA),cex=0.8)
