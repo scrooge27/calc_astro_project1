@@ -43,6 +43,6 @@ legend("bottomright",inset=.05,legend=c("galaxies","mean"), lty=c(5,1),lwd=c(1,3
 
 #points(dp,f1,col="red",type="l",lwd=2,lty=2)
 
-text(17,2000,"103",font=2)
-text(25,1450,"65",font=2)
+text(17,2000,"101",font=2)
+text(25,1450,"63",font=2)
 text(23,1900,"77",font=2)

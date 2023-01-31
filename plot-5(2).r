@@ -6,7 +6,7 @@ tollh=t0h/100
 
 om=tab1[,1]
 t=tab1[,3]
-plot(om,t,pch=16,cex=0.7,ylab="res",ylim=c(0.65,2))
+plot(om,t,pch=16,cex=0.7,ylab="res",ylim=c(1,1.2))
 
 tollh=tollh*3
 
